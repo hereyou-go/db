@@ -2,7 +2,6 @@ package db
 
 import (
 	"database/sql"
-	"errors"
 	"regexp"
 	"strings"
 
@@ -61,7 +60,7 @@ func (cmd *Command) Build() (sql string, params []interface{}, err error) {
 		if val, ok := cmd.parameters[name]; ok {
 			params = append(params, val)
 		} else {
-			err = errors.New("未设置参数：" + name)
+			err = logs.NewError("DBERR_UNSETPARAM", "[DB] Named parameter :"+name+" not found, forgot set it?")
 			return
 		}
 		sql = sql[:loc[0]] + "?" + sql[loc[1]:]
@@ -86,6 +85,6 @@ func (cmd *Command) Query() (*sql.Rows, error) {
 	if err != nil {
 		return nil, err
 	}
-	logs.Debug("\n[SQL] %v \n[PARAMS]%+v", query, args)
+	logs.Debug("\n[SQL] %v \n[Parameters]%+v", query, args)
 	return cmd.conn.Query(query, args...)
 }
