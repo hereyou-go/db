@@ -5,7 +5,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/one-go/logs"
+	"github.com/hereyou-go/logs"
 )
 
 type Command struct {
