@@ -17,9 +17,8 @@ type Command struct {
 	cachedParams []interface{}
 }
 
-func NewCommand(conn Connection, template ...string) *Command {
+func initCommand(template ...string) *Command {
 	cmd := &Command{
-		conn:       conn,
 		parameters: make(map[string]interface{}),
 		rebuild:    true,
 	}
@@ -34,6 +33,12 @@ func (cmd *Command) SetCommand(template string) error {
 	return nil
 }
 
+func (cmd *Command) Set(name string, value interface{}) error {
+	cmd.parameters[strings.ToLower(name)] = value
+	return nil
+}
+
+// SetParam is deprecated.
 func (cmd *Command) SetParam(name string, value interface{}) error {
 	cmd.parameters[strings.ToLower(name)] = value
 	return nil
@@ -71,20 +76,52 @@ func (cmd *Command) Build() (sql string, params []interface{}, err error) {
 	return
 }
 
-func (cmd *Command) Exec() (sql.Result, error) {
+type ExecutableCommand struct {
+	*Command
+}
+
+func (cmd *ExecutableCommand) Exec(conn Connection) (sql.Result, error) {
 	query, args, err := cmd.Build()
 	if err != nil {
 		return nil, err
 	}
 	logs.Debug("\n[SQL] %v \n[PARAMS]%+v", query, args)
-	return cmd.conn.Exec(query, args...)
+	return conn.Exec(query, args...)
 }
 
-func (cmd *Command) Query() (*sql.Rows, error) {
+func newExecutable() *ExecutableCommand {
+	return &ExecutableCommand{
+		Command: initCommand(),
+	}
+}
+
+type QueryableCommand struct {
+	*Command
+}
+
+func (cmd *QueryableCommand) Query(conn Connection) (*sql.Rows, error) {
 	query, args, err := cmd.Build()
 	if err != nil {
 		return nil, err
 	}
 	logs.Debug("\n[SQL] %v \n[Parameters]%+v", query, args)
-	return cmd.conn.Query(query, args...)
+	return conn.Query(query, args...)
+}
+
+func newQueryable(sql string) *QueryableCommand {
+	return &QueryableCommand{
+		Command: initCommand(sql),
+	}
+}
+
+type DBCommand struct {
+	*Command
+	*ExecutableCommand
+	*QueryableCommand
+}
+
+func NewCommand(sql string) *DBCommand {
+	return &DBCommand{
+		Command: initCommand(sql),
+	}
 }
