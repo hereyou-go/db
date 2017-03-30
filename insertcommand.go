@@ -1,22 +1,30 @@
 package db
+import (
+	"database/sql"
 
-type InsertCommand struct {
-	*ExecutableCommand
+	"github.com/hereyou-go/logs"
+)
+type InsertCommand interface {
+	Command
+	Executable
+}
+
+type DBInsertCommand struct {
+	DBCommand
 	table string
 }
 
-func Insert(table string) *InsertCommand {
-	return &InsertCommand{
-		ExecutableCommand: newExecutable(),
-		table:             table,
+func Insert(table string) InsertCommand {
+	return &DBInsertCommand{
+		DBCommand: *NewCommand(),
+		table:     table,
 	}
 }
 
-func (cmd *InsertCommand) Build() (sql string, params []interface{}, err error) {
-
+func (cmd *DBInsertCommand) Build() (sql string, params []interface{}, err error) {
 	fields := ""
 	vals := ""
-	for col := range cmd.parameters {
+	for col := range cmd.DBCommand.parameters {
 		if fields != "" {
 			fields += ", "
 			vals += ", "
@@ -24,6 +32,15 @@ func (cmd *InsertCommand) Build() (sql string, params []interface{}, err error) 
 		fields += "`" + col + "`"
 		vals += ":" + col
 	}
-	cmd.template = "INSERT INTO `" + cmd.table + "` (" + fields + ") VALUES (" + vals + ")"
-	return cmd.Command.Build()
+	cmd.DBCommand.template = "INSERT INTO `" + cmd.table + "` (" + fields + ") VALUES (" + vals + ")"
+	return cmd.DBCommand.Build()
+}
+
+func (cmd *DBInsertCommand) Exec(conn Connection) (sql.Result, error) {
+	query, args, err := cmd.Build()
+	if err != nil {
+		return nil, logs.Wrap(err)
+	}
+	logs.Debug("\n[SQL] %v \n[Parameters] %+v", query, args)
+	return conn.Exec(query, args...)
 }

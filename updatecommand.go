@@ -2,21 +2,26 @@ package db
 
 import "github.com/hereyou-go/logs"
 
-type UpdateCommand struct {
-	*ExecutableCommand
+type UpdateCommand interface {
+	Command
+	Executable
+}
+
+type DBUpdateCommand struct {
+	*DBCommand
 	table string
 	keys  []string
 }
 
-func Update(table string, keys ...string) *UpdateCommand {
-	return &UpdateCommand{
-		ExecutableCommand: newExecutable(),
-		table:             table,
-		keys:              keys,
+func Update(table string, keys ...string) UpdateCommand {
+	return &DBUpdateCommand{
+		DBCommand: NewCommand(),
+		table:     table,
+		keys:      keys,
 	}
 }
 
-func (cmd *UpdateCommand) Build() (sql string, params []interface{}, err error) {
+func (cmd *DBUpdateCommand) Build() (sql string, params []interface{}, err error) {
 	if cmd.keys == nil || len(cmd.keys) == 0 {
 		return "", nil, logs.NewError("", "key(s) is required, but is null.")
 	}
@@ -50,5 +55,5 @@ func (cmd *UpdateCommand) Build() (sql string, params []interface{}, err error) 
 		condition += "`" + col + "`=:" + col
 	}
 	cmd.template = "UPDATE `" + cmd.table + "` SET " + fields + " WHERES " + condition + ""
-	return cmd.Command.Build()
+	return cmd.DBCommand.Build()
 }

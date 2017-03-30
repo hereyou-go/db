@@ -8,7 +8,20 @@ import (
 	"github.com/hereyou-go/logs"
 )
 
-type Command struct {
+type Command interface {
+	Set(name string, value interface{}) error
+	Build() (sql string, params []interface{}, err error)
+}
+
+type Executable interface {
+	Exec(conn Connection) (sql.Result, error)
+}
+
+type Queryable interface {
+	Query(conn Connection) (*sql.Rows, error)
+}
+
+type DBCommand struct {
 	conn         Connection
 	parameters   map[string]interface{}
 	template     string
@@ -17,8 +30,8 @@ type Command struct {
 	cachedParams []interface{}
 }
 
-func initCommand(template ...string) *Command {
-	cmd := &Command{
+func NewCommand(template ...string) *DBCommand {
+	cmd := &DBCommand{
 		parameters: make(map[string]interface{}),
 		rebuild:    true,
 	}
@@ -27,26 +40,26 @@ func initCommand(template ...string) *Command {
 	}
 	return cmd
 }
-func (cmd *Command) SetCommand(template string) error {
+func (cmd *DBCommand) SetCommand(template string) error {
 	cmd.template = template
 	cmd.rebuild = true
 	return nil
 }
 
-func (cmd *Command) Set(name string, value interface{}) error {
+func (cmd *DBCommand) Set(name string, value interface{}) error {
 	cmd.parameters[strings.ToLower(name)] = value
 	return nil
 }
 
 // SetParam is deprecated.
-func (cmd *Command) SetParam(name string, value interface{}) error {
-	cmd.parameters[strings.ToLower(name)] = value
-	return nil
-}
+// func (cmd *DBCommand) SetParam(name string, value interface{}) error {
+// 	cmd.parameters[strings.ToLower(name)] = value
+// 	return nil
+// }
 
 var _commandParamReg = regexp.MustCompile(`\:\w+`)
 
-func (cmd *Command) Build() (sql string, params []interface{}, err error) {
+func (cmd *DBCommand) Build() (sql string, params []interface{}, err error) {
 	if !cmd.rebuild {
 		sql = cmd.cachedSQL
 		params = cmd.cachedParams
@@ -70,58 +83,75 @@ func (cmd *Command) Build() (sql string, params []interface{}, err error) {
 		}
 		sql = sql[:loc[0]] + "?" + sql[loc[1]:]
 	}
+	if sql == "" {
+		err = logs.NewError("DBERR_BUILD", "SQL statement is required. template:"+ cmd.template)
+			return
+	}
 	cmd.rebuild = false
 	cmd.cachedSQL = sql
 	cmd.cachedParams = params
 	return
 }
 
-type ExecutableCommand struct {
-	*Command
-}
+// type ExecutableCommand struct {
+// 	*Command
+// }
 
-func (cmd *ExecutableCommand) Exec(conn Connection) (sql.Result, error) {
+func (cmd *DBCommand) Exec(conn Connection) (sql.Result, error) {
 	query, args, err := cmd.Build()
 	if err != nil {
-		return nil, err
+		return nil, logs.Wrap(err)
 	}
-	logs.Debug("\n[SQL] %v \n[PARAMS]%+v", query, args)
+	logs.Debug("\n[SQL] %v \n[Parameters] %+v", query, args)
 	return conn.Exec(query, args...)
 }
 
-func newExecutable() *ExecutableCommand {
-	return &ExecutableCommand{
-		Command: initCommand(),
-	}
-}
+// func newExecutable() *ExecutableCommand {
+// 	return &ExecutableCommand{
+// 		Command: initCommand(),
+// 	}
+// }
 
-type QueryableCommand struct {
-	*Command
-}
+// type QueryableCommand struct {
+// 	*Command
+// }
 
-func (cmd *QueryableCommand) Query(conn Connection) (*sql.Rows, error) {
+func (cmd *DBCommand) Query(conn Connection) (*sql.Rows, error) {
 	query, args, err := cmd.Build()
 	if err != nil {
-		return nil, err
+		return nil, logs.Wrap(err)
 	}
-	logs.Debug("\n[SQL] %v \n[Parameters]%+v", query, args)
+	logs.Debug("\n[SQL       ] %v \n[Parameters] %+v", query, args)
 	return conn.Query(query, args...)
+	// stmt, err := conn.Prepare(query)
+	// if err != nil {
+	// 	return nil, logs.Wrap(err)
+	// }
+	// defer stmt.Close()
+	// return stmt.Query(args)
 }
 
-func newQueryable(sql string) *QueryableCommand {
-	return &QueryableCommand{
-		Command: initCommand(sql),
-	}
-}
+// func newQueryable(sql string) *QueryableCommand {
+// 	return &QueryableCommand{
+// 		Command: initCommand(sql),
+// 	}
+// }
 
-type DBCommand struct {
-	*Command
-	*ExecutableCommand
-	*QueryableCommand
-}
+// type DBCommand struct {
+// 	*Command
+// 	*ExecutableCommand
+// 	*QueryableCommand
+// }
 
-func NewCommand(sql string) *DBCommand {
-	return &DBCommand{
-		Command: initCommand(sql),
-	}
-}
+// func NewCommand(sql string) *DBCommand {
+// 	cmd := initCommand(sql)
+// 	return &DBCommand{
+// 		Command: cmd,
+// 		QueryableCommand: &QueryableCommand{
+// 			Command: cmd,
+// 		},
+// 		ExecutableCommand: &ExecutableCommand{
+// 			Command: cmd,
+// 		},
+// 	}
+// }
